@@ -34,6 +34,27 @@ void registerPub(ros::NodeHandle &n)
     keyframebasevisual.setLineWidth(0.01);
 }
 
+void outputTrajectory(std::ofstream& ofs_loop, std::ofstream& ofs_odom)
+{
+  ofs_loop.precision(8);
+  ofs_odom.precision(8);
+  for(auto pose : loop_path.poses)
+  {
+    ofs_loop << pose.header.seq << " " << pose.pose.position.x << " "
+             << pose.pose.position.y << " " << pose.pose.position.z << " "
+             << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
+             << pose.pose.orientation.z << " " << pose.pose.orientation.w << " " << std::endl;
+  }
+
+  for(auto pose : path.poses)
+  {
+    ofs_odom << pose.header.seq << " " << pose.pose.position.x << " "
+             << pose.pose.position.y << " " << pose.pose.position.z << " "
+             << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
+             << pose.pose.orientation.z << " " << pose.pose.orientation.w << " " << std::endl;
+  }
+}
+
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::Header &header)
 {
     Eigen::Quaterniond quadrotor_Q = Q ;
@@ -93,7 +114,7 @@ void printStatistics(const Estimator &estimator, double t)
 }
 
 void pubOdometry(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
-                Eigen::Matrix3d loop_correct_r)
+                Eigen::Matrix3d loop_correct_r, int64_t frame_id)
 {
     if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
     {
@@ -108,9 +129,10 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header, Eig
         odometry.pose.pose.orientation.y = Quaterniond(estimator.Rs[WINDOW_SIZE]).y();
         odometry.pose.pose.orientation.z = Quaterniond(estimator.Rs[WINDOW_SIZE]).z();
         odometry.pose.pose.orientation.w = Quaterniond(estimator.Rs[WINDOW_SIZE]).w();
-        
+
         geometry_msgs::PoseStamped pose_stamped;
         pose_stamped.header = header;
+        if(frame_id >= 0) pose_stamped.header.seq = frame_id;
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose = odometry.pose.pose;
         path.header = header;
@@ -264,7 +286,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header, E
     loop_margin_cloud.header = header;
 
     for (auto &it_per_id : estimator.f_manager.feature)
-    { 
+    {
         int used_num;
         used_num = it_per_id.feature_per_frame.size();
         if (!(used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
@@ -272,7 +294,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header, E
         //if (it_per_id->start_frame > WINDOW_SIZE * 3.0 / 4.0 || it_per_id->solve_flag != 1)
         //        continue;
 
-        if (it_per_id.start_frame == 0 && it_per_id.feature_per_frame.size() <= 2 
+        if (it_per_id.start_frame == 0 && it_per_id.feature_per_frame.size() <= 2
             && it_per_id.solve_flag == 1 )
         {
             int imu_i = it_per_id.start_frame;
@@ -293,7 +315,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header, E
 void pubPoseGraph(CameraPoseVisualization* posegraph, const std_msgs::Header &header)
 {
     posegraph->publish_by(pub_pose_graph, header);
-    
+
 }
 
 void updateLoopPath(nav_msgs::Path _loop_path)

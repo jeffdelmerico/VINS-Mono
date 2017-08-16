@@ -28,6 +28,19 @@ int IMAGE_ROW, IMAGE_COL;
 std::string VINS_FOLDER_PATH;
 int MAX_KEYFRAME_NUM;
 
+std::string FISHEYE_MASK;
+int MAX_CNT;
+int MIN_DIST;
+int FREQ;
+double F_THRESHOLD;
+int SHOW_TRACK;
+int STEREO_TRACK;
+int EQUALIZE;
+int ROW;
+int COL;
+int FISHEYE;
+bool PUB_THIS_FRAME;
+
 template <typename T>
 T readParam(ros::NodeHandle &n, std::string name)
 {
@@ -48,6 +61,7 @@ void readParameters(ros::NodeHandle &n)
 {
     std::string config_file;
     config_file = readParam<std::string>(n, "config_file");
+    ROS_INFO_STREAM("Opening config file: " << config_file);
     cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
     if(!fsSettings.isOpened())
     {
@@ -87,7 +101,7 @@ void readParameters(ros::NodeHandle &n)
         EX_CALIB_RESULT_PATH = VINS_FOLDER_PATH + EX_CALIB_RESULT_PATH;
 
     }
-    else 
+    else
     {
         if ( ESTIMATE_EXTRINSIC == 1)
         {
@@ -111,9 +125,20 @@ void readParameters(ros::NodeHandle &n)
         TIC.push_back(eigen_T);
         ROS_INFO_STREAM("Extrinsic_R : " << std::endl << RIC[0]);
         ROS_INFO_STREAM("Extrinsic_T : " << std::endl << TIC[0].transpose());
-        
-    } 
 
+    }
+
+    MAX_CNT = fsSettings["max_cnt"];
+    MIN_DIST = fsSettings["min_dist"];
+    ROW = fsSettings["image_height"];
+    COL = fsSettings["image_width"];
+    FREQ = fsSettings["freq"];
+    F_THRESHOLD = fsSettings["F_threshold"];
+    SHOW_TRACK = fsSettings["show_track"];
+    EQUALIZE = fsSettings["equalize"];
+    FISHEYE = fsSettings["fisheye"];
+    if (FISHEYE == 1)
+        FISHEYE_MASK = VINS_FOLDER_PATH + "config/fisheye_mask.jpg";
 
 
     LOOP_CLOSURE = fsSettings["loop_closure"];
@@ -132,6 +157,12 @@ void readParameters(ros::NodeHandle &n)
     BIAS_ACC_THRESHOLD = 0.1;
     BIAS_GYR_THRESHOLD = 0.1;
     MAX_KEYFRAME_NUM = 1000;
-    
+
+    STEREO_TRACK = false;
+    PUB_THIS_FRAME = false;
+
+    if (FREQ == 0)
+        FREQ = 100;
+
     fsSettings.release();
 }

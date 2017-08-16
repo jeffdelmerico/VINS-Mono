@@ -35,12 +35,14 @@ extern int IMAGE_ROW, IMAGE_COL;
 
 void registerPub(ros::NodeHandle &n);
 
+void outputTrajectory(std::ofstream& ofs_loop, std::ofstream& ofs_odom);
+
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::Header &header);
 
 void printStatistics(const Estimator &estimator, double t);
 
 void pubOdometry(const Estimator &estimator, const std_msgs::Header &header, Eigen::Vector3d loop_correct_t,
-                Eigen::Matrix3d loop_correct_r);
+                Eigen::Matrix3d loop_correct_r, int64_t frame_id = -1);
 
 void pubInitialGuess(const Estimator &estimator, const std_msgs::Header &header);
 
