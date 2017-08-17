@@ -35,7 +35,7 @@ extern int IMAGE_ROW, IMAGE_COL;
 
 void registerPub(ros::NodeHandle &n);
 
-void outputTrajectory(std::ofstream& ofs_loop, std::ofstream& ofs_odom);
+void outputTrajectory(std::ofstream& ofs);
 
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::Header &header);
 

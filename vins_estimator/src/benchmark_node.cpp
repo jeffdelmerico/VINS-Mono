@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <queue>
 #include <map>
+#include <tuple>
 #include <thread>
 #include <mutex>
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
@@ -33,7 +36,7 @@
 // Feature Tracker
 vector<uchar> r_status;
 vector<float> r_err;
-queue<sensor_msgs::ImageConstPtr> img_buf;
+queue<pair<sensor_msgs::ImageConstPtr, uint64_t>> img_buf;
 
 FeatureTracker trackerData[NUM_OF_CAM];
 double first_image_time;
@@ -46,7 +49,7 @@ Estimator estimator;
 std::condition_variable con;
 double current_time = -1;
 queue<sensor_msgs::ImuConstPtr> imu_buf;
-queue<sensor_msgs::PointCloudConstPtr> feature_buf;
+queue<pair<sensor_msgs::PointCloudConstPtr, int64_t>> feature_buf;
 std::mutex m_posegraph_buf;
 queue<int> optimize_posegraph_buf;
 queue<KeyFrame*> keyframe_buf;
@@ -73,7 +76,7 @@ Eigen::Vector3d tmp_Bg;
 Eigen::Vector3d acc_0;
 Eigen::Vector3d gyr_0;
 
-queue<pair<cv::Mat, double>> image_buf;
+queue<tuple<cv::Mat, double, int64_t>> image_buf;
 LoopClosure *loop_closure;
 KeyFrameDatabase keyframe_database;
 
@@ -85,7 +88,7 @@ std_msgs::Header cur_header;
 Eigen::Vector3d relocalize_t{Eigen::Vector3d(0, 0, 0)};
 Eigen::Matrix3d relocalize_r{Eigen::Matrix3d::Identity()};
 
-bool finished_processing = false;
+std::atomic<bool> finished_processing(false);
 int64_t img_id = -1;
 
 void predict(const sensor_msgs::ImuConstPtr &imu_msg)
@@ -138,30 +141,34 @@ void update()
 
 }
 
-std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
+std::vector<std::tuple<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr, int64_t>>
 getMeasurements()
 {
-    std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
+    std::vector<std::tuple<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr, int64_t>> measurements;
 
-    while (!finished_processing)
+    while (true)
     {
+        if(finished_processing.load())
+          break;
+
         if (imu_buf.empty() || feature_buf.empty())
             return measurements;
 
-        if (!(imu_buf.back()->header.stamp > feature_buf.front()->header.stamp))
+        if (!(imu_buf.back()->header.stamp > feature_buf.front().first->header.stamp))
         {
             ROS_WARN("wait for imu, only should happen at the beginning");
             sum_of_wait++;
             return measurements;
         }
 
-        if (!(imu_buf.front()->header.stamp < feature_buf.front()->header.stamp))
+        if (!(imu_buf.front()->header.stamp < feature_buf.front().first->header.stamp))
         {
             ROS_WARN("throw img, only should happen at the beginning");
             feature_buf.pop();
             continue;
         }
-        sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front();
+        sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front().first;
+        int64_t id = feature_buf.front().second;
         feature_buf.pop();
 
         std::vector<sensor_msgs::ImuConstPtr> IMUs;
@@ -171,7 +178,7 @@ getMeasurements()
             imu_buf.pop();
         }
 
-        measurements.emplace_back(IMUs, img_msg);
+        measurements.emplace_back(IMUs, img_msg, id);
     }
     return measurements;
 }
@@ -193,10 +200,10 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
     }
 }
 
-void raw_image_callback(const sensor_msgs::ImageConstPtr &img_msg)
+void raw_image_callback(const sensor_msgs::ImageConstPtr &img_msg, const int64_t id)
 {
     f_buf.lock();
-    img_buf.push(img_msg);
+    img_buf.push(make_pair(img_msg, id));
     f_buf.unlock();
 
     cv_bridge::CvImagePtr img_ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
@@ -205,15 +212,15 @@ void raw_image_callback(const sensor_msgs::ImageConstPtr &img_msg)
     if(LOOP_CLOSURE)
     {
         i_buf.lock();
-        image_buf.push(make_pair(img_ptr->image, img_msg->header.stamp.toSec()));
+        image_buf.push(make_tuple(img_ptr->image, img_msg->header.stamp.toSec(),id));
         i_buf.unlock();
     }
 }
 
-void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
+void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg, const int64_t id)
 {
     m_buf.lock();
-    feature_buf.push(feature_msg);
+    feature_buf.push(make_pair(feature_msg, id));
     m_buf.unlock();
     con.notify_one();
 }
@@ -255,8 +262,11 @@ void process_loop_detection()
         loop_closure->initCameraModel(CAM_NAMES);
     }
 
-    while(LOOP_CLOSURE && !finished_processing)
+    while(LOOP_CLOSURE)
     {
+        if(finished_processing.load())
+          break;
+
         KeyFrame* cur_kf = NULL;
         m_keyframe_buf.lock();
         while(!keyframe_buf.empty())
@@ -428,8 +438,11 @@ void process_loop_detection()
 //thread: pose_graph optimization
 void process_pose_graph()
 {
-    while(!finished_processing)
+    while(true)
     {
+        if(finished_processing.load())
+          break;
+
         m_posegraph_buf.lock();
         int index = -1;
         while (!optimize_posegraph_buf.empty())
@@ -469,25 +482,29 @@ void process_pose_graph()
 // thread: visual-inertial odometry
 void process()
 {
-    while (!finished_processing)
+    while (true)
     {
-        std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
-        ROS_INFO("Attempting to get unique lock on m_buf.");
+        if(finished_processing.load())
+          break;
+
+        std::vector<std::tuple<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr, int64_t>> measurements;
+        ROS_DEBUG("Attempting to get unique lock on m_buf.");
         std::unique_lock<std::mutex> lk(m_buf);
-        ROS_INFO("Waiting for measurements.");
-        con.wait(lk, [&]
+        ROS_DEBUG("Waiting for measurements.");
+        con.wait_for(lk, std::chrono::milliseconds(5000), [&]
                  {
             return (measurements = getMeasurements()).size() != 0;
                  });
-        ROS_INFO("Received measurements.");
+        ROS_DEBUG("Received measurements.");
         lk.unlock();
 
         for (auto &measurement : measurements)
         {
-            for (auto &imu_msg : measurement.first)
+            ROS_DEBUG("In process::measurements loop");
+            for (auto &imu_msg : std::get<0>(measurement))
                 send_imu(imu_msg);
 
-            auto img_msg = measurement.second;
+            auto img_msg = std::get<1>(measurement);
             ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());
 
             TicToc t_s;
@@ -509,6 +526,7 @@ void process()
             **/
             if(LOOP_CLOSURE)
             {
+                ROS_INFO("In process::measurements::loop_closure loop");
                 // remove previous loop
                 vector<RetriveData>::iterator it = estimator.retrive_data_vector.begin();
                 for(; it != estimator.retrive_data_vector.end(); )
@@ -534,7 +552,7 @@ void process()
                     Vector3d vio_T_w_i = estimator.Ps[WINDOW_SIZE - 2];
                     Matrix3d vio_R_w_i = estimator.Rs[WINDOW_SIZE - 2];
                     i_buf.lock();
-                    while(!image_buf.empty() && image_buf.front().second < estimator.Headers[WINDOW_SIZE - 2].stamp.toSec())
+                    while(!image_buf.empty() && std::get<1>(image_buf.front()) < estimator.Headers[WINDOW_SIZE - 2].stamp.toSec())
                     {
                         image_buf.pop();
                     }
@@ -542,14 +560,14 @@ void process()
                     //assert(estimator.Headers[WINDOW_SIZE - 1].stamp.toSec() == image_buf.front().second);
                     // relative_T   i-1_T_i relative_R  i-1_R_i
                     cv::Mat KeyFrame_image;
-                    KeyFrame_image = image_buf.front().first;
+                    KeyFrame_image = std::get<0>(image_buf.front());
 
                     const char *pattern_file = PATTERN_FILE.c_str();
                     Vector3d cur_T;
                     Matrix3d cur_R;
                     cur_T = relocalize_r * vio_T_w_i + relocalize_t;
                     cur_R = relocalize_r * vio_R_w_i;
-                    KeyFrame* keyframe = new KeyFrame(estimator.Headers[WINDOW_SIZE - 2].stamp.toSec(), vio_T_w_i, vio_R_w_i, cur_T, cur_R, image_buf.front().first, pattern_file);
+                    KeyFrame* keyframe = new KeyFrame(estimator.Headers[WINDOW_SIZE - 2].stamp.toSec(), vio_T_w_i, vio_R_w_i, cur_T, cur_R, std::get<0>(image_buf.front()), pattern_file, std::get<2>(image_buf.front()));
                     keyframe->setExtrinsic(estimator.tic[0], estimator.ric[0]);
                     keyframe->buildKeyFrameFeatures(estimator, m_camera);
                     m_keyframe_buf.lock();
@@ -590,7 +608,7 @@ void process()
                 relocalize_t = estimator.relocalize_t;
                 relocalize_r = estimator.relocalize_r;
             }
-            pubOdometry(estimator, header, relocalize_t, relocalize_r, img_id);
+            pubOdometry(estimator, header, relocalize_t, relocalize_r, std::get<2>(measurement));
             pubKeyPoses(estimator, header, relocalize_t, relocalize_r);
             pubCameraPose(estimator, header, relocalize_t, relocalize_r);
             pubPointCloud(estimator, header, relocalize_t, relocalize_r);
@@ -610,14 +628,19 @@ void process()
 // thread: feature tracking
 void track_features()
 {
-  while(!finished_processing)
+  while(true)
   {
+    if(finished_processing.load())
+      break;
+
     ROS_DEBUG("Tracking features.");
     sensor_msgs::ImageConstPtr img_msg;
+    int64_t id;
     f_buf.lock();
     if(img_buf.size() > 0)
     {
-      img_msg = img_buf.front();
+      img_msg = img_buf.front().first;
+      id = img_buf.front().second;
       img_buf.pop();
       f_buf.unlock();
     }
@@ -791,7 +814,7 @@ void track_features()
         feature_points->channels.push_back(u_of_point);
         feature_points->channels.push_back(v_of_point);
         ROS_DEBUG("publish %f, at %f", feature_points->header.stamp.toSec(), ros::Time::now().toSec());
-        feature_callback(feature_points);
+        feature_callback(feature_points, id);
     }
     ROS_INFO("whole feature tracker processing costs: %f", t_r.toc());
   }
@@ -879,28 +902,31 @@ int main(int argc, char **argv)
         std::chrono::milliseconds dura(static_cast<int>((this_msg_time-last_msg_time)*1000));
         std::this_thread::sleep_for(dura);
       }
-      if (imgMsg != NULL) raw_image_callback(imgMsg);
+      if (imgMsg != NULL) raw_image_callback(imgMsg, img_id);
     }
     if(this_msg_time > 0)
     {
       last_msg_time = this_msg_time;
     }
     ros::spinOnce();
+    //if(img_id > 200)
+    //  break;
   }
 
   while(!img_buf.empty() && !imu_buf.empty() && !feature_buf.empty())
   {
     ROS_INFO("Processing...");
     ros::spinOnce();
-    std::chrono::milliseconds dura(5000);
+    std::chrono::milliseconds dura(500);
     std::this_thread::sleep_for(dura);
   }
   ROS_INFO_STREAM("Finished processing all " << img_id << " images");
-  finished_processing = true;
+  finished_processing.store(true);
+  con.notify_one();
   bagIn.close();
 
   ROS_INFO("Trying to join measurement_process");
-  measurement_process.detach(); // For some reason this thread hangs
+  measurement_process.join(); // For some reason this thread hangs
   ROS_INFO("Trying to join feature_tracking");
   feature_tracking.join();
   if(LOOP_CLOSURE)
@@ -913,20 +939,13 @@ int main(int argc, char **argv)
 
   std::string trace_dir = "/tmp";
   n.param("trace_dir", trace_dir, trace_dir);
-  std::string loop_out = trace_dir + "/traj_estimate_loop.txt";
-  std::string odom_out = trace_dir + "/traj_estimate.txt";
-  std::ofstream trace_est_pose_loop;
-  trace_est_pose_loop.open(loop_out.c_str());
-  if(trace_est_pose_loop.fail())
-    throw std::runtime_error("Could not create tracefile. Does folder exist?");
-  std::cout << "Writing trace of estimated pose with loop closures to: " << loop_out << std::endl;
+  std::string trace_out = trace_dir + "/traj_estimate.txt";
   std::ofstream trace_est_pose;
-  trace_est_pose.open(odom_out.c_str());
+  trace_est_pose.open(trace_out.c_str());
   if(trace_est_pose.fail())
     throw std::runtime_error("Could not create tracefile. Does folder exist?");
-  std::cout << "Writing trace of estimated pose to: " << odom_out << std::endl;
-  outputTrajectory(trace_est_pose_loop, trace_est_pose);
-  trace_est_pose_loop.close();
+  std::cout << "Writing trace of estimated pose to: " << trace_out << std::endl;
+  outputTrajectory(trace_est_pose);
   trace_est_pose.close();
 
   return 0;

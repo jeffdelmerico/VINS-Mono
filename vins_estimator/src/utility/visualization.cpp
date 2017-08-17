@@ -34,24 +34,16 @@ void registerPub(ros::NodeHandle &n)
     keyframebasevisual.setLineWidth(0.01);
 }
 
-void outputTrajectory(std::ofstream& ofs_loop, std::ofstream& ofs_odom)
+void outputTrajectory(std::ofstream& ofs)
 {
-  ofs_loop.precision(8);
-  ofs_odom.precision(8);
-  for(auto pose : loop_path.poses)
+  ofs.precision(8);
+  nav_msgs::Path* output_path = LOOP_CLOSURE ? &loop_path : &path;
+  for(auto pose : output_path->poses)
   {
-    ofs_loop << pose.header.seq << " " << pose.pose.position.x << " "
-             << pose.pose.position.y << " " << pose.pose.position.z << " "
-             << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
-             << pose.pose.orientation.z << " " << pose.pose.orientation.w << " " << std::endl;
-  }
-
-  for(auto pose : path.poses)
-  {
-    ofs_odom << pose.header.seq << " " << pose.pose.position.x << " "
-             << pose.pose.position.y << " " << pose.pose.position.z << " "
-             << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
-             << pose.pose.orientation.z << " " << pose.pose.orientation.w << " " << std::endl;
+    ofs << pose.header.seq << " " << pose.pose.position.x << " "
+        << pose.pose.position.y << " " << pose.pose.position.z << " "
+        << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
+        << pose.pose.orientation.z << " " << pose.pose.orientation.w << " " << std::endl;
   }
 }
 

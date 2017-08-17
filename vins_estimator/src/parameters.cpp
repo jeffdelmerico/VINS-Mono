@@ -62,6 +62,7 @@ void readParameters(ros::NodeHandle &n)
     std::string config_file;
     config_file = readParam<std::string>(n, "config_file");
     ROS_INFO_STREAM("Opening config file: " << config_file);
+    CAM_NAMES = config_file;
     cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
     if(!fsSettings.isOpened())
     {
@@ -149,7 +150,6 @@ void readParameters(ros::NodeHandle &n)
         VOC_FILE = VINS_FOLDER_PATH + VOC_FILE;
         PATTERN_FILE = VINS_FOLDER_PATH + PATTERN_FILE;
         MIN_LOOP_NUM = fsSettings["min_loop_num"];
-        CAM_NAMES = config_file;
     }
 
 

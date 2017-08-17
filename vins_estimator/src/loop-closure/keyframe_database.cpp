@@ -30,8 +30,8 @@ void KeyFrameDatabase::add(KeyFrame* pKF)
 	//draw local connection
 	list<KeyFrame*>::reverse_iterator rit = keyFrameList.rbegin();
 	list<KeyFrame*>::reverse_iterator lrit;
-	for (; rit != keyFrameList.rend(); rit++)  
-    {  
+	for (; rit != keyFrameList.rend(); rit++)
+    {
         if ((*rit) == pKF)
         {
         	lrit = rit;
@@ -48,7 +48,7 @@ void KeyFrameDatabase::add(KeyFrame* pKF)
         	}
         	break;
         }
-    } 
+    }
 */
 	// add key frame to path for visualization
 	nav_msgs::Odometry odometry;
@@ -70,7 +70,7 @@ void KeyFrameDatabase::add(KeyFrame* pKF)
 	//refine_path.header = odometry.header;
 	//refine_path.poses.push_back(pose_stamped);
 	//mlockPath.unlock();
-	
+
 	ROS_DEBUG("add keyframe end!");
 
 }
@@ -87,7 +87,7 @@ void KeyFrameDatabase::downsample(vector<int> &erase_index)
 
 		list<KeyFrame*>::iterator it = keyFrameList.begin();
 		Vector3d last_P = Vector3d(0, 0, 0);
-		for (; it != keyFrameList.end(); )   
+		for (; it != keyFrameList.end(); )
 		{
 			Vector3d tmp_t;
 			Matrix3d tmp_r;
@@ -132,7 +132,7 @@ void KeyFrameDatabase::getKeyframeIndexList(vector<int> &keyframe_index_list)
 {
 	unique_lock<mutex> lock(mMutexkeyFrameList);
 	list<KeyFrame*>::iterator it = keyFrameList.begin();
-	for (; it != keyFrameList.end(); it++)   
+	for (; it != keyFrameList.end(); it++)
 	{
 		keyframe_index_list.push_back((*it)->global_index);
 	}
@@ -143,7 +143,7 @@ KeyFrame* KeyFrameDatabase::getKeyframe(int index)
 {
 	unique_lock<mutex> lock(mMutexkeyFrameList);
 	list<KeyFrame*>::iterator it = keyFrameList.begin();
-	for (; it != keyFrameList.end(); it++)   
+	for (; it != keyFrameList.end(); it++)
 	{
 	    if((*it)->global_index == index)
 	    	break;
@@ -166,11 +166,11 @@ KeyFrame* KeyFrameDatabase::getLastKeyframe(int last_index)
 {
 	unique_lock<mutex> lock(mMutexkeyFrameList);
 	list<KeyFrame*>::reverse_iterator rit = keyFrameList.rbegin();
-	for (int i = 0; i < last_index; i++)  
-    {  
+	for (int i = 0; i < last_index; i++)
+    {
         rit++;
         assert(rit != keyFrameList.rend());
-    } 
+    }
     return *rit;
 }
 
@@ -230,7 +230,7 @@ void KeyFrameDatabase::optimize4DoFLoopPoseGraph(int cur_index, Eigen::Vector3d 
 		problem.AddParameterBlock(t_array[i], 3);
 
 		if ((*it)->global_index == earliest_loop_index)
-		{	
+		{
 			problem.SetParameterBlockConstant(euler_array[i]);
 			problem.SetParameterBlockConstant(t_array[i]);
 		}
@@ -246,9 +246,9 @@ void KeyFrameDatabase::optimize4DoFLoopPoseGraph(int cur_index, Eigen::Vector3d 
 		    double relative_yaw = euler_array[i][0] - euler_array[i-j][0];
 		    ceres::CostFunction* cost_function = FourDOFError::Create( relative_t.x(), relative_t.y(), relative_t.z(),
 		                                   relative_yaw, euler_conncected.y(), euler_conncected.z());
-		    problem.AddResidualBlock(cost_function, NULL, euler_array[i-j], 
-		                            t_array[i-j], 
-		                            euler_array[i], 
+		    problem.AddResidualBlock(cost_function, NULL, euler_array[i-j],
+		                            t_array[i-j],
+		                            euler_array[i],
 		                            t_array[i]);
 		  }
 		}
@@ -264,11 +264,11 @@ void KeyFrameDatabase::optimize4DoFLoopPoseGraph(int cur_index, Eigen::Vector3d 
 			double relative_yaw = (*it)->getLoopRelativeYaw();
 			ceres::CostFunction* cost_function = FourDOFWeightError::Create( relative_t.x(), relative_t.y(), relative_t.z(),
 																	   relative_yaw, euler_conncected.y(), euler_conncected.z());
-			problem.AddResidualBlock(cost_function, loss_function, euler_array[connected_index], 
-														  t_array[connected_index], 
-														  euler_array[i], 
+			problem.AddResidualBlock(cost_function, loss_function, euler_array[connected_index],
+														  t_array[connected_index],
+														  euler_array[i],
 														  t_array[i]);
-			
+
 		}
 		if ((*it)->global_index == cur_index)
 			break;
@@ -359,13 +359,13 @@ void KeyFrameDatabase::updateVisualization()
 
 		if ((*it)->update_loop_info)
 		{
-			
+
 			KeyFrame* connected_KF = getKeyframe((*it)->loop_index);
 			Vector3d conncected_P;
 			Matrix3d connected_R;
 			connected_KF->getPose(conncected_P, connected_R);
 			posegraph_visualization->add_loopedge(P, conncected_P);
-			
+
 			/*
 			//supposed edge
 			Vector3d supposed_P;
@@ -374,7 +374,7 @@ void KeyFrameDatabase::updateVisualization()
 			supposed_P = P - connected_R * relative_t;
 			posegraph_visualization->add_edge(P, supposed_P);
 			*/
-			
+
 			list<KeyFrame*>::iterator lit;
 			lit = it;
 			lit--;
@@ -398,6 +398,7 @@ void KeyFrameDatabase::updateVisualization()
 
 		geometry_msgs::PoseStamped pose_stamped;
 		pose_stamped.header = odometry.header;
+		pose_stamped.header.seq = (*it)->id;
 		pose_stamped.pose = odometry.pose.pose;
 		refine_path.header = odometry.header;
 		refine_path.poses.push_back(pose_stamped);

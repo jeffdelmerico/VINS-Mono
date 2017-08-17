@@ -33,16 +33,17 @@ private:
 class KeyFrame
 {
 public:
-	KeyFrame(double _header, Eigen::Vector3d _vio_T_w_c, Eigen::Matrix3d _vio_R_w_c, 
-				Eigen::Vector3d _cur_T_w_c, Eigen::Matrix3d _cur_R_w_c,cv::Mat &_image, const char *_brief_pattern_file);
-	void setExtrinsic(Eigen::Vector3d T, Eigen::Matrix3d R);	
+	KeyFrame(double _header, Eigen::Vector3d _vio_T_w_c, Eigen::Matrix3d _vio_R_w_c,
+				Eigen::Vector3d _cur_T_w_c, Eigen::Matrix3d _cur_R_w_c,cv::Mat &_image,
+        const char *_brief_pattern_file, int64_t _id = -1);
+	void setExtrinsic(Eigen::Vector3d T, Eigen::Matrix3d R);
 	void FundmantalMatrixRANSAC(vector<cv::Point2f> &measurements_old, vector<cv::Point2f> &measurements_old_norm,
                  	 const camodocal::CameraPtr &m_camera);
 
 	void extractBrief(cv::Mat &image);
-	
+
 	void buildKeyFrameFeatures(Estimator &estimator, const camodocal::CameraPtr &m_camera);
-	
+
 	bool inAera(cv::Point2f pt, cv::Point2f center, float area_size);
 
 	bool searchInAera(cv::Point2f center_cur, float area_size,
@@ -63,7 +64,7 @@ public:
 	                                const camodocal::CameraPtr &m_camera);
 
 	void PnPRANSAC(vector<cv::Point2f> &measurements_old,
-	               std::vector<cv::Point2f> &measurements_old_norm, 
+	               std::vector<cv::Point2f> &measurements_old_norm,
 	               Eigen::Vector3d &PnP_T_old, Eigen::Matrix3d &PnP_R_old);
 
 	void updatePose(const Eigen::Vector3d &_T_w_i, const Eigen::Matrix3d &_R_w_i);
@@ -90,8 +91,9 @@ public:
 
 	double getLoopRelativeYaw();
 
-	// data 
+	// data
 	double header;
+  int64_t id;
 	std::vector<Eigen::Vector3d> point_clouds, point_clouds_matched;
 	//feature in origin image plane
 	std::vector<cv::Point2f> measurements, measurements_matched;
@@ -122,7 +124,7 @@ public:
 	int resample_index;
 	const char *BRIEF_PATTERN_FILE;
 	// index t_x t_y t_z q_w q_x q_y q_z yaw
-	
+
 
 private:
 	Eigen::Vector3d T_w_i;
@@ -138,4 +140,3 @@ private:
 };
 
 #endif
-

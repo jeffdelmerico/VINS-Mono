@@ -1,9 +1,9 @@
 #include "keyframe.h"
 
-KeyFrame::KeyFrame(double _header, Eigen::Vector3d _vio_T_w_i, Eigen::Matrix3d _vio_R_w_i, 
-                   Eigen::Vector3d _cur_T_w_i, Eigen::Matrix3d _cur_R_w_i, 
-                   cv::Mat &_image, const char *_brief_pattern_file)
-:header{_header}, image{_image}, BRIEF_PATTERN_FILE(_brief_pattern_file)
+KeyFrame::KeyFrame(double _header, Eigen::Vector3d _vio_T_w_i, Eigen::Matrix3d _vio_R_w_i,
+                   Eigen::Vector3d _cur_T_w_i, Eigen::Matrix3d _cur_R_w_i,
+                   cv::Mat &_image, const char *_brief_pattern_file, int64_t _id)
+:header{_header}, id{_id}, image{_image}, BRIEF_PATTERN_FILE(_brief_pattern_file)
 {
     T_w_i = _cur_T_w_i;
     R_w_i = _cur_R_w_i;
@@ -143,7 +143,7 @@ void KeyFrame::FundmantalMatrixRANSAC(vector<cv::Point2f> &measurements_old,
             tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
             un_measurements_old[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
         }
-        
+
         vector<uchar> status;
         cv::findFundamentalMat(un_measurements, un_measurements_old, cv::FM_RANSAC, 5.0, 0.99, status);
         reduceVector(measurements_old, status);
@@ -151,11 +151,11 @@ void KeyFrame::FundmantalMatrixRANSAC(vector<cv::Point2f> &measurements_old,
         reduceVector(measurements_matched, status);
         reduceVector(features_id_matched, status);
         reduceVector(point_clouds_matched, status);
-        
+
     }
 }
 
-void KeyFrame::searchByDes(std::vector<cv::Point2f> &measurements_old, 
+void KeyFrame::searchByDes(std::vector<cv::Point2f> &measurements_old,
                            std::vector<cv::Point2f> &measurements_old_norm,
                            const std::vector<BRIEF::bitset> &descriptors_old,
                            const std::vector<cv::KeyPoint> &keypoints_old,
@@ -182,7 +182,7 @@ void KeyFrame::searchByDes(std::vector<cv::Point2f> &measurements_old,
 }
 
 void KeyFrame::PnPRANSAC(vector<cv::Point2f> &measurements_old,
-                         std::vector<cv::Point2f> &measurements_old_norm, 
+                         std::vector<cv::Point2f> &measurements_old_norm,
                          Eigen::Vector3d &PnP_T_old, Eigen::Matrix3d &PnP_R_old)
 {
     cv::Mat r, rvec, t, D, tmp_r;
@@ -194,7 +194,7 @@ void KeyFrame::PnPRANSAC(vector<cv::Point2f> &measurements_old,
 
     R_inital = R_w_c.inverse();
     P_inital = -(R_inital * T_w_c);
-    
+
     cv::eigen2cv(R_inital, tmp_r);
     cv::Rodrigues(tmp_r, rvec);
     cv::eigen2cv(P_inital, t);
@@ -225,7 +225,7 @@ void KeyFrame::PnPRANSAC(vector<cv::Point2f> &measurements_old,
     {
         int n = inliers.at<int>(i);
         status[n] = 1;
-    } 
+    }
 
     cv::Rodrigues(rvec, r);
     Matrix3d R_pnp, R_w_c_old;
@@ -236,7 +236,7 @@ void KeyFrame::PnPRANSAC(vector<cv::Point2f> &measurements_old,
     T_w_c_old = R_w_c_old * (-T_pnp);
 
     PnP_R_old = R_w_c_old * qic.transpose();
-    PnP_T_old = T_w_c_old - PnP_R_old * tic;   
+    PnP_T_old = T_w_c_old - PnP_R_old * tic;
 
     reduceVector(measurements_old, status);
     reduceVector(measurements_old_norm, status);
@@ -342,17 +342,17 @@ BriefExtractor::BriefExtractor(const std::string &pattern_file)
   // the object is created.
   // We load the pattern that we used to build the vocabulary, to make
   // the descriptors compatible with the predefined vocabulary
-  
+
   // loads the pattern
   cv::FileStorage fs(pattern_file.c_str(), cv::FileStorage::READ);
   if(!fs.isOpened()) throw string("Could not open file ") + pattern_file;
-  
+
   vector<int> x1, y1, x2, y2;
   fs["x1"] >> x1;
   fs["x2"] >> x2;
   fs["y1"] >> y1;
   fs["y2"] >> y2;
-  
+
   m_brief.importPairs(x1, y1, x2, y2);
 }
 
