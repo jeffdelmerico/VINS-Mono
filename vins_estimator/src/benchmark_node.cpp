@@ -824,7 +824,7 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "vins_estimator_benchmark");
   ros::NodeHandle n("~");
-  ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
+  ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
   readParameters(n);
   estimator.setParameter();
 #ifdef EIGEN_DONT_PARALLELIZE
@@ -885,11 +885,6 @@ int main(int argc, char **argv)
     if(it->getTopic() == IMU_TOPIC){
       sensor_msgs::Imu::ConstPtr imuMsg = it->instantiate<sensor_msgs::Imu>();
       this_msg_time = imuMsg->header.stamp.toSec();
-      if(last_msg_time > 0)
-      {
-        std::chrono::milliseconds dura(static_cast<int>((this_msg_time-last_msg_time)*1000));
-        std::this_thread::sleep_for(dura);
-      }
       if (imuMsg != NULL) imu_callback(imuMsg);
     }
     if(it->getTopic() == IMAGE_TOPIC){
@@ -897,20 +892,23 @@ int main(int argc, char **argv)
       ++img_id;
       ROS_INFO_STREAM("Processing image #" << img_id);
       this_msg_time = imgMsg->header.stamp.toSec();
-      if(last_msg_time > 0)
-      {
-        std::chrono::milliseconds dura(static_cast<int>((this_msg_time-last_msg_time)*1000));
-        std::this_thread::sleep_for(dura);
-      }
+      //if(last_msg_time > 0)
+      //{
+      //  std::chrono::milliseconds dura(static_cast<int>((this_msg_time-last_msg_time)*1000));
+      //  std::this_thread::sleep_for(dura);
+      //}
       if (imgMsg != NULL) raw_image_callback(imgMsg, img_id);
+    }
+    if(last_msg_time > 0)
+    {
+      std::chrono::milliseconds dura(static_cast<int>((this_msg_time-last_msg_time)*1000));
+      std::this_thread::sleep_for(dura);
     }
     if(this_msg_time > 0)
     {
       last_msg_time = this_msg_time;
     }
     ros::spinOnce();
-    //if(img_id > 200)
-    //  break;
   }
 
   while(!img_buf.empty() && !imu_buf.empty() && !feature_buf.empty())
