@@ -67,6 +67,12 @@ void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, co
     pub_latest_odometry.publish(odometry);
 }
 
+void traceTiming(std::ofstream& trace, const double timestamp, const double t_frame)
+{
+  trace.precision(16);
+  trace << timestamp << ", " << t_frame << std::endl;
+}
+
 void printStatistics(const Estimator &estimator, double t)
 {
     if (estimator.solver_flag != Estimator::SolverFlag::NON_LINEAR)

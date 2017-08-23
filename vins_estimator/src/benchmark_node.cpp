@@ -31,6 +31,12 @@
 #include <sensor_msgs/Imu.h>
 #include <message_filters/subscriber.h>
 
+#include <unordered_map>
+#include <utility>
+#include <vikit/timer.h>
+std::unordered_map<double, std::pair<int64_t, vk::Timer>> results;
+std::ofstream trace_timing;
+
 #define SHOW_UNDISTORTION 0
 
 // Feature Tracker
@@ -599,6 +605,16 @@ void process()
             }
             double whole_t = t_s.toc();
             printStatistics(estimator, whole_t);
+            auto result = results.find(img_msg->header.stamp.toSec());
+            if(result != results.end())
+            {
+              traceTiming(trace_timing, img_msg->header.stamp.toSec(), result->second.second.stop());
+              results.erase(img_msg->header.stamp.toSec());
+            }
+            else
+            {
+              ROS_WARN_STREAM("Could not find result from time " << img_msg->header.stamp.toSec() << " in results.");
+            }
             std_msgs::Header header = img_msg->header;
             header.frame_id = "world";
             cur_header = header;
@@ -824,7 +840,7 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "vins_estimator_benchmark");
   ros::NodeHandle n("~");
-  ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
+  ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
   readParameters(n);
   estimator.setParameter();
 #ifdef EIGEN_DONT_PARALLELIZE
@@ -833,6 +849,15 @@ int main(int argc, char **argv)
   ROS_WARN("waiting for image and imu...");
 
   registerPub(n);
+
+
+  std::string trace_dir = "/tmp";
+  n.param("trace_dir", trace_dir, trace_dir);
+  std::string timing_out = trace_dir + "/trace.csv";
+  trace_timing.open(timing_out.c_str());
+  if(trace_timing.fail())
+    throw std::runtime_error("Could not create tracefile. Does folder exist?");
+  trace_timing << "timestamp" << ", " << "tot_time" << std::endl;
 
   //ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
   //ros::Subscriber sub_raw_image = n.subscribe(IMAGE_TOPIC, 2000, raw_image_callback);
@@ -897,7 +922,11 @@ int main(int argc, char **argv)
       //  std::chrono::milliseconds dura(static_cast<int>((this_msg_time-last_msg_time)*1000));
       //  std::this_thread::sleep_for(dura);
       //}
-      if (imgMsg != NULL) raw_image_callback(imgMsg, img_id);
+      if (imgMsg != NULL)
+      {
+        results.emplace(std::make_pair(imgMsg->header.stamp.toSec(), std::make_pair(img_id, vk::Timer())));
+        raw_image_callback(imgMsg, img_id);
+      }
     }
     if(last_msg_time > 0)
     {
@@ -935,8 +964,6 @@ int main(int argc, char **argv)
     pose_graph.join();
   }
 
-  std::string trace_dir = "/tmp";
-  n.param("trace_dir", trace_dir, trace_dir);
   std::string trace_out = trace_dir + "/traj_estimate.txt";
   std::ofstream trace_est_pose;
   trace_est_pose.open(trace_out.c_str());
@@ -945,6 +972,7 @@ int main(int argc, char **argv)
   std::cout << "Writing trace of estimated pose to: " << trace_out << std::endl;
   outputTrajectory(trace_est_pose);
   trace_est_pose.close();
+  trace_timing.close();
 
   return 0;
 }

@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
     cv_bridge
     camera_model
     rosbag
+    vikit_common
     )
 
 find_package(OpenCV REQUIRED)

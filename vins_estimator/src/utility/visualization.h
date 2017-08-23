@@ -37,6 +37,8 @@ void registerPub(ros::NodeHandle &n);
 
 void outputTrajectory(std::ofstream& ofs);
 
+void traceTiming(std::ofstream& trace, const double timestamp, const double t_frame);
+
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, const std_msgs::Header &header);
 
 void printStatistics(const Estimator &estimator, double t);
