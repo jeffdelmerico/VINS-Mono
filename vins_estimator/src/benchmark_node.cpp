@@ -513,6 +513,11 @@ void process()
             auto img_msg = std::get<1>(measurement);
             ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());
 
+            auto timer_to_start = results.find(img_msg->header.stamp.toSec());
+            if(timer_to_start != results.end())
+            {
+              timer_to_start->second.second.start();
+            }
             TicToc t_s;
             map<int, vector<pair<int, Vector3d>>> image;
             for (unsigned int i = 0; i < img_msg->points.size(); i++)
@@ -857,7 +862,7 @@ int main(int argc, char **argv)
   trace_timing.open(timing_out.c_str());
   if(trace_timing.fail())
     throw std::runtime_error("Could not create tracefile. Does folder exist?");
-  trace_timing << "timestamp" << ", " << "tot_time" << std::endl;
+  trace_timing << "timestamp" << "," << "tot_time" << std::endl;
 
   //ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
   //ros::Subscriber sub_raw_image = n.subscribe(IMAGE_TOPIC, 2000, raw_image_callback);
