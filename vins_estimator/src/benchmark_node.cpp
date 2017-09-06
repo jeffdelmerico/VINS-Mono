@@ -35,6 +35,7 @@
 #include <utility>
 #include <vikit/timer.h>
 std::unordered_map<double, std::pair<int64_t, vk::Timer>> results;
+std::unordered_map<double, int64_t> stamp_to_id_map;
 std::ofstream trace_timing;
 
 #define SHOW_UNDISTORTION 0
@@ -930,6 +931,7 @@ int main(int argc, char **argv)
       if (imgMsg != NULL)
       {
         results.emplace(std::make_pair(imgMsg->header.stamp.toSec(), std::make_pair(img_id, vk::Timer())));
+        stamp_to_id_map.emplace(std::make_pair(imgMsg->header.stamp.toSec(), img_id));
         raw_image_callback(imgMsg, img_id);
       }
     }
@@ -975,7 +977,7 @@ int main(int argc, char **argv)
   if(trace_est_pose.fail())
     throw std::runtime_error("Could not create tracefile. Does folder exist?");
   std::cout << "Writing trace of estimated pose to: " << trace_out << std::endl;
-  outputTrajectory(trace_est_pose);
+  outputTrajectory(trace_est_pose, stamp_to_id_map);
   trace_est_pose.close();
   trace_timing.close();
 

@@ -34,16 +34,24 @@ void registerPub(ros::NodeHandle &n)
     keyframebasevisual.setLineWidth(0.01);
 }
 
-void outputTrajectory(std::ofstream& ofs)
+void outputTrajectory(std::ofstream& ofs, const std::unordered_map<double, int64_t>& map)
 {
   ofs.precision(8);
   nav_msgs::Path* output_path = LOOP_CLOSURE ? &loop_path : &path;
   for(auto pose : output_path->poses)
   {
-    ofs << pose.header.seq << " " << pose.pose.position.x << " "
-        << pose.pose.position.y << " " << pose.pose.position.z << " "
-        << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
-        << pose.pose.orientation.z << " " << pose.pose.orientation.w << " " << std::endl;
+    auto result = map.find(pose.header.stamp.toSec());
+    if(result != map.end())
+    {
+      ofs << result->second << " " << pose.pose.position.x << " "
+          << pose.pose.position.y << " " << pose.pose.position.z << " "
+          << pose.pose.orientation.x << " " << pose.pose.orientation.y << " "
+          << pose.pose.orientation.z << " " << pose.pose.orientation.w << std::endl;
+    }
+    else
+    {
+      ROS_WARN_STREAM("Could not find result from time " << pose.header.stamp.toSec() << " in stamp_to_id_map.");
+    }
   }
 }
 

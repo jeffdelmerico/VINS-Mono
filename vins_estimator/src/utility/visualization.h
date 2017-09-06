@@ -35,7 +35,7 @@ extern int IMAGE_ROW, IMAGE_COL;
 
 void registerPub(ros::NodeHandle &n);
 
-void outputTrajectory(std::ofstream& ofs);
+void outputTrajectory(std::ofstream& ofs, const std::unordered_map<double, int64_t>& map);
 
 void traceTiming(std::ofstream& trace, const double timestamp, const double t_frame);
 
